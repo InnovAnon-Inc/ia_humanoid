@@ -107,6 +107,48 @@ end
 --    assert(self.fake_player:get_meta():get_string("ia_gender:gender") ~= nil)
 --end
 
+-- Helper to safely bridge without losing engine callbacks or crashing on index types
+local function apply_humanoid_bridge(self)
+    -- 1. Capture the prototype (the methods defined in register_entity)
+    local entity_mt = getmetatable(self)
+    local prototype = entity_mt and entity_mt.__index
+    assert(prototype ~= nil, "Humanoid bridge failed: No entity prototype found")
+
+    -- 2. Use fakelib to bridge the object to the fake_player
+    -- This makes self:is_player(), self:get_meta(), etc. work.
+    fakelib.bridge_object(self.object, self, self.fake_player)
+
+    -- 3. RE-WRAP the new metatable's __index 
+    local new_mt = getmetatable(self)
+    local bridge_index = new_mt.__index
+    
+    -- Ensure we have something to bridge to
+    assert(bridge_index ~= nil, "Humanoid bridge failed: fakelib did not set __index")
+
+    new_mt.__index = function(t, k)
+        -- A. Try the bridge (Fake Player / Proxy) first
+        local val
+        if type(bridge_index) == "function" then
+            val = bridge_index(t, k)
+        else
+            val = bridge_index[k]
+        end
+
+        if val ~= nil then return val end
+
+        -- B. Fallback to the Prototype (Entity Definition)
+        -- This ensures on_step, on_rightclick, etc. are found by the engine
+        if type(prototype) == "function" then
+            return prototype(t, k)
+        else
+            return prototype[k]
+        end
+    end
+    
+    -- Logging to verify the bridge is active
+    minetest.log("action", "[ia_humanoid] Bridge established for " .. (self.mob_name or "unknown"))
+end
+
 ---------------------------
 -- 3. The Lifecycle API
 ---------------------------
@@ -128,7 +170,8 @@ function ia_humanoid.init(self, staticdata) -- FIXME fakelib.bridge_object() cau
 
     --init_metadata(self, data) -- 2026-02-28 09:29:35: ERROR[Main]: ServerError: AsyncErr: Lua: Runtime error from mod 'ia_mob' in callback luaentity_Activate(): /home/frederick/.minetest/mods/ia_humanoid/init.lua:103: attempt to call method 'get_meta' (a nil value)
     --init_metadata(self, data) -- didn't work
-    fakelib.bridge_object(self.object, self, self.fake_player)
+--    fakelib.bridge_object(self.object, self, self.fake_player)
+    apply_humanoid_bridge(self)
     --init_metadata(self, data) -- didn't work
     --apply_lifecycle_bridge(self, self.fake_player)
     assert(self:is_player() == true)
