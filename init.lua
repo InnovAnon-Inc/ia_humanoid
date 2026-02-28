@@ -14,6 +14,10 @@ assert(player_api.on_leaveplayer ~= nil)
 
 ia_humanoid = {}
 
+local modname = minetest.get_current_modname() or "ia_humanoid"
+local modpath = minetest.get_modpath(modname)
+dofile(modpath .. "/player_sao.lua")
+
 ---------------------------
 -- 1. Initialization Logic
 ---------------------------
@@ -74,38 +78,6 @@ local function sync_armor_inventory(player)
         end
     end
 end
-
---local function apply_lifecycle_bridge(entity, proxy) -- 2026-02-28 09:40:27: ERROR[Main]: ServerError: AsyncErr: Lua: Runtime error from mod '' in callback luaentity_Activate(): /home/frederick/.minetest/mods/ia_humanoid/init.lua:90: attempt to index upvalue 'bridge_index' (a function value)
---    local original_mt = getmetatable(entity)
---
---    -- We use fakelib's bridging logic but ensure we don't lose the engine's connection
---    fakelib.bridge_object(entity.object, entity, proxy)
---
---    -- ENHANCEMENT: Wrap the new metatable to fallback to the original prototype
---    local bridge_mt = getmetatable(entity)
---    local bridge_index = bridge_mt.__index
---
---    bridge_mt.__index = function(t, k)
---        -- 1. Try the bridge logic (Proxy/ObjectRef)
---        local val = type(bridge_index) == "function" and bridge_index(t, k) or bridge_index[k]
---        if val ~= nil then return val end
---
---        -- 2. Fallback to original entity methods (on_step, get_staticdata, etc.)
---        if original_mt and original_mt.__index then
---            return original_mt.__index[k]
---        end
---    end
---end
---local function init_metadata(self, data) -- didn't work
---    if data.state then
---        persistencelib.apply_state(self, data.state)
---    else
---        --self:get_meta():set_string("ia_gender:gender", self.gender)
---        self.fake_player:get_meta():set_string("ia_gender:gender", self.gender)
---    end
---    -- Verify metadata was set correctly
---    assert(self.fake_player:get_meta():get_string("ia_gender:gender") ~= nil)
---end
 
 -- Helper to safely bridge without losing engine callbacks or crashing on index types
 local function apply_humanoid_bridge(self)
@@ -168,12 +140,7 @@ function ia_humanoid.init(self, staticdata) -- FIXME fakelib.bridge_object() cau
     })
     assert(self.fake_player:get_player_name() == self.mob_name)
 
-    --init_metadata(self, data) -- 2026-02-28 09:29:35: ERROR[Main]: ServerError: AsyncErr: Lua: Runtime error from mod 'ia_mob' in callback luaentity_Activate(): /home/frederick/.minetest/mods/ia_humanoid/init.lua:103: attempt to call method 'get_meta' (a nil value)
-    --init_metadata(self, data) -- didn't work
---    fakelib.bridge_object(self.object, self, self.fake_player)
     apply_humanoid_bridge(self)
-    --init_metadata(self, data) -- didn't work
-    --apply_lifecycle_bridge(self, self.fake_player)
     assert(self:is_player() == true)
     assert(self:get_player_name() == self.mob_name)
 
@@ -188,10 +155,6 @@ function ia_humanoid.init(self, staticdata) -- FIXME fakelib.bridge_object() cau
 --        self.fake_player:get_meta():set_string("ia_gender:gender", self.gender)
         self:get_meta():set_string("ia_gender:gender", self.gender)
     end
-
-    --fakelib.bridge_object(self.object, self, self.fake_player)
-    --assert(self:is_player() == true) -- This will now pass!
-    --assert(self:get_player_name() == self.mob_name)
 
     assert(self.fake_player:get_meta():get_string("ia_gender:gender") ~= nil) -- sanity check: our gender has be init'd
     assert(self:get_meta():get_string("ia_gender:gender") ~= nil)
@@ -223,16 +186,6 @@ function ia_humanoid.init(self, staticdata) -- FIXME fakelib.bridge_object() cau
     assert(self:get_meta():get_string("edit_skin:skin") ~= nil)
     --minetest.log('AAAAA edit_skin:skin='..self:get_meta():get_string("edit_skin:skin")) -- skin looks fine. but we see 'no texture' when using the bridge_object()
 
---    --self.object:set_properties(self.fake_player:get_properties())
-----    armor     .on_joinplayer(self.fake_player)
-----    assert(player_api.get_animation(self.fake_player).model == "3d_armor_character.b3d")
-----    assert(armor.textures[self.mob_name] ~= nil)
-----    --assert(self.fake_player:get_inventory():get_size("armor") > 0)
---
---    -- F. Final Visual Sync
---    --armor:set_player_armor(self.fake_player)
---    --self.object:set_armor_groups({fleshy = 100})
---  
     -- make them fall instead of floating in mid-air
     -- Inside the Dunce entity definition or activation
     self.object:set_acceleration({x = 0, y = -9.81, z = 0})
@@ -244,6 +197,10 @@ function ia_humanoid.init(self, staticdata) -- FIXME fakelib.bridge_object() cau
 end
 -- TODO on_leaveplayer ???
 -- TODO death handling
+-- 3d_armor has on_leaveplayer, on_dieplayer
+-- edit_skin has on_leaveplayer
+-- bones has on_dieplayer
+-- beds has on_leaveplayer, on_dieplayer
 
 -- Captures all persistent data for storage
 function ia_humanoid.serialize(self)
@@ -311,6 +268,38 @@ function ia_humanoid.register_humanoid_entity(name, definition)
         armor:punch(self, puncher, time_from_last_punch, tool_capabilities)
         if user_on_punch then
             user_on_punch(self, puncher, time_from_last_punch, tool_capabilities, dir)
+        end
+    end
+
+    local user_on_step = definition.on_step
+    final_def.on_step = function(self, dtime)
+	    --minetest.log('ia_humanoid.on_step() '..self:get_player_name())
+        -- 1. Process Pathfinding Coroutines
+	assert(self)
+	assert(self.object)
+	local hp_orig = self:get_hp()
+	assert(hp_orig > 0)
+	local pos     = self:get_pos()
+	if pos == nil then
+		minetest.log('ia_humanoid.on_step() no pos')
+		return
+	end
+	assert(pos ~= nil)
+
+        --if ia_humanoid.handle_breathing_and_drowning then
+            ia_humanoid.handle_breathing_and_drowning(self, dtime)
+        --end
+
+	local hp = self:get_hp()
+	assert(hp_orig >= hp)
+	minetest.log('ia_humanoid.on_step() '..self:get_player_name()..' hp='..hp..' orig='..hp_orig..' breath='..self:get_breath())
+	if hp <= 0 then
+            return
+        end
+
+        -- 2. Run the user's specific mob logic (on_step from ia_mob)
+        if user_on_step then
+            user_on_step(self, dtime)
         end
     end
 
