@@ -237,8 +237,13 @@ function ia_humanoid.init(self, staticdata) -- FIXME fakelib.bridge_object() cau
     -- Inside the Dunce entity definition or activation
     self.object:set_acceleration({x = 0, y = -9.81, z = 0})
 --    self:set_acceleration({x = 0, y = -9.81, z = 0})
+    assert(self:is_player() == true)
     futil.log("info", "Humanoid initialized: %s", self.mob_name)
+
+    -- TODO on_joinplayer for all mods ???
 end
+-- TODO on_leaveplayer ???
+-- TODO death handling
 
 -- Captures all persistent data for storage
 function ia_humanoid.serialize(self)
@@ -267,7 +272,6 @@ ia_humanoid.default_props = {
     collisionbox = {-0.3, 0.0, -0.3, 0.3, 1.7, 0.3},
     stepheight   = 0.6,
     health_max   = 20, -- TODO parametrize ?
-    -- TODO breath ???
     physical     = true,
 }
 
@@ -287,10 +291,12 @@ function ia_humanoid.register_humanoid_entity(name, definition)
     local user_on_activate = definition.on_activate
     final_def.on_activate = function(self, staticdata, dtime_s)
         ia_humanoid.init(self, staticdata)
+        assert(self:is_player() == true)
     	--fakelib.bridge_object(self.object, self, self.fake_player)
         if user_on_activate then
             user_on_activate(self, staticdata, dtime_s)
         end
+        assert(self:is_player() == true)
     end
 
     -- Injected Persistence
@@ -321,7 +327,7 @@ armor.get_valid_player = function(self, player, msg)
     if player:is_player() then
 	    local player_name = player:get_player_name()
 	    assert(player_name ~= nil)
-	    local inv = minetest.get_inventory({type="detached", name=player:get_player_name().."_armor"})
+	    local inv = minetest.get_inventory({type="detached", name=player_name.."_armor"})
 	    assert(inv ~= nil)
 	    --minetest.log('armor.get_valid_player fake: '..player_name)
 	    return player_name, inv
