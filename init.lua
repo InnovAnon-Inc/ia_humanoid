@@ -12,11 +12,15 @@ assert(edit_skin .on_leaveplayer ~= nil)
 assert(player_api.on_joinplayer  ~= nil)
 assert(player_api.on_leaveplayer ~= nil)
 
+-- TODO falling damage
+
 ia_humanoid = {}
 
 local modname = minetest.get_current_modname() or "ia_humanoid"
 local modpath = minetest.get_modpath(modname)
 dofile(modpath .. "/player_sao.lua")
+
+local gravity = tonumber(core.settings:get("movement_gravity")) or 9.81
 
 ---------------------------
 -- 1. Initialization Logic
@@ -59,7 +63,7 @@ local function generate_human_name(gender)
         suffix = suffix + 1
     end
 
-    ia_names.reserve(final_name)
+    ia_names.reserve(final_name) -- TODO un-reserve on death ?
     return final_name
 end
 
@@ -167,6 +171,8 @@ function ia_humanoid.init(self, staticdata) -- FIXME fakelib.bridge_object() cau
 --    player_api.set_model    (self.fake_player, "character.b3d")
     player_api.set_model    (self, "character.b3d")
 
+    player_monoids.on_joinplayer(self)
+
     -- edit_skin seems to want to work around 3d_armor, so we armor.on_joinplayer() before edit_skin, too
 --    armor     .on_joinplayer(self.fake_player)
     armor     .on_joinplayer(self)
@@ -188,7 +194,7 @@ function ia_humanoid.init(self, staticdata) -- FIXME fakelib.bridge_object() cau
 
     -- make them fall instead of floating in mid-air
     -- Inside the Dunce entity definition or activation
-    self.object:set_acceleration({x = 0, y = -9.81, z = 0})
+    self.object:set_acceleration({x = 0, y = -gravity, z = 0})
 --    self:set_acceleration({x = 0, y = -9.81, z = 0})
     assert(self:is_player() == true)
     futil.log("info", "Humanoid initialized: %s", self.mob_name)
@@ -201,6 +207,8 @@ end
 -- edit_skin has on_leaveplayer
 -- bones has on_dieplayer
 -- beds has on_leaveplayer, on_dieplayer
+-- player_monoids needs on_leaveplayer
+-- player_api ???
 
 -- Captures all persistent data for storage
 function ia_humanoid.serialize(self)
@@ -244,12 +252,15 @@ function ia_humanoid.register_humanoid_entity(name, definition)
     local final_def = table.copy(definition)
     final_def.initial_properties = props
 
+    -- TODO ensure that this doesn't run twice
     -- Injected Activation
     local user_on_activate = definition.on_activate
     final_def.on_activate = function(self, staticdata, dtime_s)
         ia_humanoid.init(self, staticdata)
         assert(self:is_player() == true)
     	--fakelib.bridge_object(self.object, self, self.fake_player)
+	assert(self.mob_name ~= nil)
+        ia_names.register_active_mob(self.mob_name, self.object)
         if user_on_activate then
             user_on_activate(self, staticdata, dtime_s)
         end
@@ -292,7 +303,7 @@ function ia_humanoid.register_humanoid_entity(name, definition)
 
 	local hp = self:get_hp()
 	assert(hp_orig >= hp)
-	minetest.log('ia_humanoid.on_step() '..self:get_player_name()..' hp='..hp..' orig='..hp_orig..' breath='..self:get_breath())
+	--minetest.log('ia_humanoid.on_step() '..self:get_player_name()..' hp='..hp..' orig='..hp_orig..' breath='..self:get_breath())
 	if hp <= 0 then
             return
         end
