@@ -298,7 +298,8 @@ function ia_humanoid.register_humanoid_entity(name, definition)
 	assert(pos ~= nil)
 
         --if ia_humanoid.handle_breathing_and_drowning then
-            ia_humanoid.handle_breathing_and_drowning(self, dtime)
+            --ia_humanoid.handle_breathing_and_drowning(self, dtime)
+	    ia_humanoid.handle_environment_effects(self,dtime)
         --end
 
 	local hp = self:get_hp()

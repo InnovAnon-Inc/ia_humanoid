@@ -107,3 +107,69 @@ function ia_humanoid.handle_breathing_and_drowning(self, dtime)
         end
     end
 end
+
+-- ia_humanoid/player_sao.lua
+
+--- Emulates falling damage logic found in PlayerSAO
+-- @param self The entity table
+-- @param dtime Delta time from on_step
+function ia_humanoid.handle_falling_damage(self, dtime)
+    local pos = self.object:get_pos()
+    local vel = self.object:get_velocity()
+    if not pos or not vel then return end
+
+    -- Initialize tracking variables
+    self._last_y_vel = self._last_y_vel or 0
+
+    -- Detection: If we were falling and now we aren't (or we hit something)
+    -- We check if the velocity drop was significant.
+    local impact = self._last_y_vel - vel.y
+
+    -- In Luanti, falling damage usually triggers when colliding with a surface.
+    -- If current Y velocity is ~0 (or positive) and we were falling fast:
+    if vel.y >= -0.1 and self._last_y_vel < -4.0 then
+        -- Standard Luanti calculation:
+        -- Damage = (Impact Speed - Safe Speed) * Multiplier
+        local safe_speed = 4.0
+        local multiplier = 2.0
+        local impact_speed = math.abs(self._last_y_vel)
+
+        if impact_speed > safe_speed then
+            local damage = math.floor((impact_speed - safe_speed) * multiplier)
+
+            -- Apply 3d_armor's feather fall if applicable
+            -- We check the name registry we just built
+            local name = self:get_player_name()
+            if armor.def[name] and armor.def[name].feather > 0 then
+                -- Feather fall typically reduces or negates fall damage
+                damage = 0
+                -- Optional: log the save
+                minetest.log("action", "[ia_humanoid] " .. name .. " feather-falled.")
+            end
+
+            if damage > 0 then
+                minetest.log("action", string.format("[ia_humanoid] %s took %d fall damage (impact: %.2f)",
+                    name, damage, impact_speed))
+
+                -- Use set_hp to trigger armor/death logic
+                self:set_hp(self:get_hp() - damage)
+
+                -- Play thud sound
+                minetest.sound_play("default_hard_footstep", {
+                    pos = pos,
+                    gain = 1.0,
+                    max_hear_distance = 10,
+                })
+            end
+        end
+    end
+
+    -- Update last velocity for next step
+    self._last_y_vel = vel.y
+end
+
+-- Update the existing breathing helper to include the new call
+function ia_humanoid.handle_environment_effects(self, dtime)
+    ia_humanoid.handle_breathing_and_drowning(self, dtime)
+    ia_humanoid.handle_falling_damage(self, dtime)
+end
