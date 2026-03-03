@@ -293,6 +293,7 @@ function ia_humanoid.register_humanoid_entity(name, definition)
 	local pos     = self:get_pos()
 	if pos == nil then
 		minetest.log('ia_humanoid.on_step() no pos')
+                ia_names.unregister_active_mob(self.mob_name)
 		return
 	end
 	assert(pos ~= nil)
@@ -306,6 +307,7 @@ function ia_humanoid.register_humanoid_entity(name, definition)
 	assert(hp_orig >= hp)
 	--minetest.log('ia_humanoid.on_step() '..self:get_player_name()..' hp='..hp..' orig='..hp_orig..' breath='..self:get_breath())
 	if hp <= 0 then
+            --ia_names.unregister_active_mob(self.mob_name)
             return
         end
 

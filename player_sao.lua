@@ -168,8 +168,60 @@ function ia_humanoid.handle_falling_damage(self, dtime)
     self._last_y_vel = vel.y
 end
 
--- Update the existing breathing helper to include the new call
+-- ia_humanoid/player_sao.lua
+
+--- Emulates node-based damage (Lava, Fire, Cacti)
+-- @param self The entity table
+-- @param dtime Delta time from on_step
+function ia_humanoid.handle_node_damage(self, dtime)
+    self._node_damage_timer = (self._node_damage_timer or 0) + dtime
+    if self._node_damage_timer < 1.0 then return end
+    self._node_damage_timer = 0
+
+    local pos = self.object:get_pos()
+    if not pos then return end
+
+    -- Check feet, torso, and head for damaging nodes
+    -- Luanti damage_per_second is usually defined on the node
+    local positions = {
+        {x=pos.x, y=pos.y + 0.2, z=pos.z}, -- Feet
+        {x=pos.x, y=pos.y + 1.0, z=pos.z}, -- Torso
+        {x=pos.x, y=pos.y + 1.6, z=pos.z}, -- Head
+    }
+
+    local max_damage = 0
+    for _, p in ipairs(positions) do
+        local node = minetest.get_node_or_nil(p)
+        if node then
+            local def = minetest.registered_nodes[node.name]
+            if def and def.damage_per_second and def.damage_per_second > max_damage then
+                max_damage = def.damage_per_second
+            end
+        end
+    end
+
+    if max_damage > 0 then
+        -- 3d_armor check: Fire protection
+        local name = self:get_player_name()
+        if armor.def[name] and armor.def[name].fire > 0 then
+            -- Simple reduction: 1 unit of fire prot = 1 less DPS
+            max_damage = math.max(0, max_damage - armor.def[name].fire)
+        end
+
+        if max_damage > 0 then
+            self:set_hp(self:get_hp() - max_damage)
+
+            -- If it's high damage (Lava), play a sizzle
+            if max_damage > 3 then
+                minetest.sound_play("default_lava_level_heavy", {pos = pos, gain = 0.5})
+            end
+        end
+    end
+end
+
+--- Combined Environmental Handler
 function ia_humanoid.handle_environment_effects(self, dtime)
     ia_humanoid.handle_breathing_and_drowning(self, dtime)
     ia_humanoid.handle_falling_damage(self, dtime)
+    ia_humanoid.handle_node_damage(self, dtime)
 end
