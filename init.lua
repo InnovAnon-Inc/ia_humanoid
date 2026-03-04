@@ -1,5 +1,18 @@
--- IA Humanoid Framework
+-- ia_humanoid/init.lua
 -- Core dependencies must be loaded before this mod
+
+assert(minetest.get_modpath('ia_util'))
+assert(ia_util ~= nil)
+local modname                    = minetest.get_current_modname() or "ia_humanoid"
+local storage                    = minetest.get_mod_storage()
+ia_humanoid                      = {}
+--local files                      = {
+--	'player_sao'
+--}
+local modpath, S                 = ia_util.loadmod(modname)
+local log                        = ia_util.get_logger(modname)
+local assert                     = ia_util.get_assert(modname)
+
 assert(fakelib        ~= nil)
 assert(futil          ~= nil)
 assert(ia_names       ~= nil)
@@ -14,11 +27,11 @@ assert(player_api.on_leaveplayer ~= nil)
 
 -- TODO falling damage
 
-ia_humanoid = {}
+--ia_humanoid = {}
 
-local modname = minetest.get_current_modname() or "ia_humanoid"
-local modpath = minetest.get_modpath(modname)
-dofile(modpath .. "/player_sao.lua")
+--local modname = minetest.get_current_modname() or "ia_humanoid"
+--local modpath = minetest.get_modpath(modname)
+--dofile(modpath .. "/player_sao.lua")
 
 local gravity = tonumber(core.settings:get("movement_gravity")) or 9.81
 
